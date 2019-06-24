@@ -1,0 +1,399 @@
+package com.chandhar.junkworld.screens;
+
+ import com.badlogic.gdx.Gdx;
+ import com.badlogic.gdx.Input;
+ import com.badlogic.gdx.InputMultiplexer;
+import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.OrthographicCamera;
+ import com.badlogic.gdx.graphics.g2d.BitmapFont;
+ import com.badlogic.gdx.graphics.g2d.Sprite;
+ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+ import com.badlogic.gdx.graphics.g2d.TextureRegion;
+ import com.badlogic.gdx.maps.MapProperties;
+ import com.badlogic.gdx.maps.tiled.TiledMapImageLayer;
+ import com.badlogic.gdx.maps.tiled.TiledMapTile;
+ import com.badlogic.gdx.maps.tiled.TiledMapTileLayer;
+import com.badlogic.gdx.maps.MapLayer;
+import com.badlogic.gdx.maps.MapObject;
+import com.badlogic.gdx.maps.objects.RectangleMapObject;
+ import com.badlogic.gdx.maps.tiled.TiledMapTileSet;
+ import com.badlogic.gdx.math.MathUtils;
+ import com.badlogic.gdx.math.Rectangle;
+
+import com.badlogic.gdx.maps.tiled.renderers.OrthogonalTiledMapRenderer;
+ import com.badlogic.gdx.math.Vector2;
+ import com.badlogic.gdx.math.Vector3;
+ import com.badlogic.gdx.utils.Json;
+import com.badlogic.gdx.utils.viewport.Viewport;
+import com.badlogic.gdx.utils.viewport.FillViewport;
+import com.badlogic.gdx.utils.viewport.FitViewport;
+import com.badlogic.gdx.utils.viewport.Viewport;
+ import com.chandhar.junkworld.Entity;
+ import com.chandhar.junkworld.JunkWorld;
+ import com.chandhar.junkworld.Map;
+import com.chandhar.junkworld.PlayerController;
+
+ import java.util.Iterator;
+
+
+public class MainGameScreen extends GameScreen
+{
+    public static final String TAG = MainGameScreen.class.getSimpleName();
+
+    public static class VIEWPORT
+    {
+        public static float viewportWidth;              //width and Height of the viewport (what will be seen on the screen at any one time
+        public static float viewportHeight;
+        public static float virtualWidth;
+        public static float virtualHeight;
+        public static float physicalWidth;
+        public static float physicalHeight;
+        public static float aspectRatio;
+    }
+
+    public static enum GameState                        //state machine for the various game states
+    {
+        SAVING,
+        LOADING,
+        RUNNING,
+        PAUSED,
+        GAME_OVER
+    }
+
+    private static GameState gameState;
+    private Entity player;
+
+    private PlayerController controller;
+    private TextureRegion currentPlayerFrame;
+    private Sprite currentPlayerSprite;
+
+    protected OrthogonalTiledMapRenderer mapRenderer = null;
+
+    protected OrthographicCamera camera = null;
+    private static MapManager mapMgr;
+
+    private Json json;
+    private JunkWorld game;
+    private InputMultiplexer multiplexer;
+
+    public MainGameScreen(JunkWorld newGame)
+    {
+        game = newGame;
+        mapMgr = new MapManager();
+        json = new Json();
+
+        setGameState(GameState.RUNNING);
+
+        //main camera setup
+        setupViewport(10,10);
+
+        //get camera size;
+        camera = new OrthographicCamera();
+        //camera.setToOrtho(false, VIEWPORT.viewportWidth,VIEWPORT.viewportHeight);
+        camera.setToOrtho(false,640,320);
+
+        //set up a map with a unit scale 1/tilesize
+        mapRenderer = new OrthogonalTiledMapRenderer(mapMgr.getCurrentMap(), MapManager.UNIT_SCALE);
+        mapRenderer.setView(camera);
+
+        player = new Entity();
+        player.init(mapMgr.getPlayerStartUnitScaled().x,mapMgr.getPlayerStartUnitScaled().y);
+
+        currentPlayerSprite = player.getFrameSprite();
+        controller = new PlayerController(player);
+
+    }
+
+    @Override
+    public void show()
+    {
+        Gdx.input.setInputProcessor(controller);
+    }
+
+    @Override
+    public void hide() {
+        if( gameState != GameState.GAME_OVER )
+        {
+            setGameState(GameState.SAVING);
+        }
+
+        Gdx.input.setInputProcessor(null);
+    }
+
+    @Override
+    public void render(float delta) {
+        if( delta == 0){
+            return;
+        }
+
+        Gdx.gl.glClearColor(0, 0, 0, 1);
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+
+        //Lock and center camera to player's position
+        camera.position.set(currentPlayerSprite.getX(), currentPlayerSprite.getY(), 0f);
+        camera.update();
+
+        player.update(delta);
+        currentPlayerFrame = player.getFrame();
+
+        /*
+        UpdatePortalLayerActivation(player.boundingBox);
+        //todo add in collision from collision array
+        if(!isCollisionWithMapLayer(player.boundingBox))
+        {
+
+        }
+        */
+
+        //player.setNextPositionToCurrent();
+
+        controller.update(delta);
+
+        mapRenderer.setView(camera);
+        mapRenderer.render();
+
+        TiledMapTileLayer tile = (TiledMapTileLayer)(mapMgr.getCurrentMap().getLayers().get(0));
+        String layerName =(mapMgr.getCurrentMap().getLayers().get(0).getName());
+        String layername2 = tile.getName();
+        //TiledMapTileLayer.Cell cell = tile.getCell(Math.round(mouse.x),Math.round(mouse.y));
+        //TiledMapTileLayer.Cell cell = tile.getCell(Math.round(player.getCurrentPlayerPositionID().x),Math.round(player.getCurrentPlayerPositionID().y));
+        TiledMapTileLayer.Cell cell = tile.getCell(Math.round(currentPlayerSprite.getX()),Math.round(currentPlayerSprite.getY()));
+        Iterator<TiledMapTile> tilesi = mapMgr.getCurrentMap().getTileSets().getTileSet("Junktiles").iterator();
+        TiledMapTileSet tiles = mapMgr.getCurrentMap().getTileSets().getTileSet("Junktiles");
+        TiledMapTile tile1 = tiles.getTile(1);
+
+
+        if(isCollision(player.getNextPosition(), tile))
+        {
+            player.setNextPositionToCurrent();
+        }
+
+        if(Gdx.input.isKeyJustPressed(Input.Keys.H)) {
+            System.out.print("Current Position ID");
+            System.out.print(" ");
+            System.out.print(player.getCurrentPlayerPositionID().x);
+            System.out.print(" ");
+            System.out.print(player.getCurrentPlayerPositionID().y);
+            System.out.print(" ");
+            System.out.print(player.getCurrentPosition().x);
+            System.out.print(" ");
+            System.out.print(player.getCurrentPosition().y);
+            System.out.print("\n");
+            System.out.print(" Next Position ID");
+            System.out.print(" ");
+            System.out.print(player.getNextPlayerPositionID().x);
+            System.out.print(" ");
+            System.out.print(player.getNextPlayerPositionID().y);
+            System.out.print(" ");
+            System.out.print(player.getNextPosition().x);
+            System.out.print(" ");
+            System.out.print(player.getNextPosition().y);
+            //System.out.print(cell);
+            cell.setTile(tile1);
+            System.out.print("\n");
+
+        }
+
+
+        mapRenderer.getBatch().begin();
+        mapRenderer.getBatch().draw(currentPlayerFrame,currentPlayerSprite.getX(),currentPlayerSprite.getY(),1,1);
+        mapRenderer.getBatch().end();
+    }
+
+    @Override
+    public void resize(int width, int height) {
+        setupViewport(10, 10);
+        //camera.setToOrtho(false,640,320);
+        camera.setToOrtho(false, VIEWPORT.viewportWidth, VIEWPORT.viewportHeight);
+
+    }
+
+    @Override
+    public void pause() {
+        setGameState(GameState.SAVING);
+
+    }
+
+    @Override
+    public void resume() {
+        setGameState(GameState.LOADING);
+
+    }
+
+    @Override
+    public void dispose() {
+        player.dispose();
+        controller.dispose();
+        Gdx.input.setInputProcessor(null);
+        mapRenderer.dispose();
+    }
+
+    public static void setGameState(GameState gameState){
+        switch(gameState){
+            case RUNNING:
+                gameState = GameState.RUNNING;
+                break;
+            case LOADING:
+                //ProfileManager.getInstance().loadProfile();       //load json with values of save
+                gameState = GameState.RUNNING;
+                break;
+            case SAVING:
+                //ProfileManager.getInstance().saveProfile();       //save json with values of save
+                gameState = GameState.PAUSED;
+                break;
+            case PAUSED:
+                if(gameState == GameState.PAUSED)
+                {
+                    gameState = GameState.RUNNING;
+                }
+                else if( gameState == GameState.RUNNING )
+                {
+                    gameState = GameState.PAUSED;
+                }
+                break;
+            case GAME_OVER:
+                gameState = GameState.GAME_OVER;
+                break;
+            default:
+                gameState = GameState.RUNNING;
+                break;
+        }
+
+    }
+
+    private void setupViewport(int width, int height)
+    {
+        //Make the viewport a percentage of the total display area
+        VIEWPORT.virtualWidth = width;
+        VIEWPORT.virtualHeight = height;
+
+        //Current viewport dimensions
+        VIEWPORT.viewportWidth = VIEWPORT.virtualWidth;
+        VIEWPORT.viewportHeight = VIEWPORT.virtualHeight;
+
+        //pixel dimensions of display
+        VIEWPORT.physicalWidth = Gdx.graphics.getWidth();
+        VIEWPORT.physicalHeight = Gdx.graphics.getHeight();
+
+        //aspect ratio for current viewport
+        VIEWPORT.aspectRatio = (VIEWPORT.virtualWidth / VIEWPORT.virtualHeight);
+
+        //update viewport if there could be skewing
+        if( VIEWPORT.physicalWidth / VIEWPORT.physicalHeight >= VIEWPORT.aspectRatio)
+        {
+            //Letterbox left and right
+            VIEWPORT.viewportWidth = VIEWPORT.viewportHeight * (VIEWPORT.physicalWidth/VIEWPORT.physicalHeight);
+            VIEWPORT.viewportHeight = VIEWPORT.virtualHeight;
+        }
+
+        else
+        {
+            //letterbox above and below
+            VIEWPORT.viewportWidth = VIEWPORT.virtualWidth;
+            VIEWPORT.viewportHeight = VIEWPORT.viewportWidth * (VIEWPORT.physicalHeight/VIEWPORT.physicalWidth);
+        }
+
+        Gdx.app.debug(TAG, "WorldRenderer: virtual: (" + VIEWPORT.virtualWidth + "," + VIEWPORT.virtualHeight + ")" );
+        Gdx.app.debug(TAG, "WorldRenderer: viewport: (" + VIEWPORT.viewportWidth + "," + VIEWPORT.viewportHeight + ")" );
+        Gdx.app.debug(TAG, "WorldRenderer: physical: (" + VIEWPORT.physicalWidth + "," + VIEWPORT.physicalHeight + ")" );
+    }
+
+    private boolean isCollisionWithMapLayer(Rectangle boundingBox)
+    {
+        MapLayer mapCollisionLayer = mapMgr.getCollisionLayer();
+        if (mapCollisionLayer == null)
+        {
+            return false;
+        }
+
+        Rectangle rectangle = null;
+
+        for(MapObject object: mapCollisionLayer.getObjects())
+        {
+            if(object instanceof RectangleMapObject)
+            {
+                rectangle = ((RectangleMapObject)object).getRectangle();
+                if(boundingBox.overlaps(rectangle))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public boolean isCollision(Vector2 playerNextPosition, TiledMapTileLayer tile)
+    {
+
+        int mapHeight = tile.getHeight();
+        int mapWidth = tile.getWidth();
+        //by default set tile to round to nearest tile
+        int i = MathUtils.round(playerNextPosition.x);
+        int j = MathUtils.round(playerNextPosition.y);
+
+        //if the player is going to go off the edge of the map round the next player position up or down to prevent it.
+        if(playerNextPosition.x < 0) {i = MathUtils.floor(playerNextPosition.x); }
+        if(playerNextPosition.x > mapWidth-1) {i = MathUtils.ceil(playerNextPosition.x);}
+        if(playerNextPosition.y < 0) {j = MathUtils.floor(playerNextPosition.y);}
+        if(playerNextPosition.y > mapHeight-1) {j = MathUtils.ceil(playerNextPosition.y);}
+
+
+        if( i >= 0 && i < mapWidth)
+        {
+            //-j to account for y axis going down
+            if(j >= 0 && j < mapHeight)
+            {
+                //now that bounds have been checked, check if the tile is solid or not.
+                TiledMapTileLayer.Cell cell = tile.getCell(i, j);
+                boolean isSolid =  (Boolean)cell.getTile().getProperties().get("isSolid");
+                String id = (String)cell.getTile().getProperties().get("ID");
+                if(!isSolid)
+                return true;
+            }
+        }
+        player.setState(Entity.State.IDLE);
+
+        return false;
+
+    }
+
+    private boolean UpdatePortalLayerActivation(Rectangle boundingBox)
+    {
+        MapLayer mapPortalLayer = mapMgr.getPortalLayer();
+
+        if(mapPortalLayer == null)
+        {
+            return false;
+        }
+
+        Rectangle rectangle = null;
+
+        for(MapObject object: mapPortalLayer.getObjects())
+        {
+            if(object instanceof RectangleMapObject)
+            {
+                rectangle = ((RectangleMapObject)object).getRectangle();
+                if(boundingBox.overlaps(rectangle))
+                {
+                    String mapName = object.getName();
+                    if(mapName == null)
+                    {
+                        return false;
+                    }
+
+                    mapMgr.setClosestStartPositionFromScaledUnits(player.getCurrentPosition());
+                    mapMgr.LoadMap(mapName);
+                    player.init(mapMgr.getPlayerStartUnitScaled().x,mapMgr.getPlayerStartUnitScaled().y);
+                    mapRenderer.setMap(mapMgr.getCurrentMap());
+                    Gdx.app.debug(TAG, "Portal Activated");
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+
+}
